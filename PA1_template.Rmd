@@ -1,0 +1,153 @@
+---
+title: "Coursera Reproducible Research - Project 1"
+author: "Thanh Nguyen"
+date: "November 19, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading and preprocessing the data
+
+This is an R Markdown document for the required Coursera Reproducible Research course - project 1.
+When you click the **Knit** button, a document will be generated that includes both content as well as the output of my embedded R code chunks within the document.
+
+Per the instructions, by Dr Roger Peng:
+"This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day."
+
+The code will automatically download and and unzip the data file from the provided url:
+<https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip>.
+The file will be downloaded and stored in your current specified working folder.
+Its name is **project.zip**.
+
+Data will be imported into a data table called activity.
+activity1, the second data table, is basically a copy of activity without the missing values NA in the column "step"
+
+
+```{r load}
+library(data.table)
+library(dplyr)
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip","project.zip")
+unzip("project.zip")
+activity <- fread("activity.csv")
+activity <- mutate(activity, date=as.Date(date))
+activity1 <- filter(activity, !is.na(steps))
+```
+
+Data.table and dplyr packages are being used in this submission.
+
+## What is mean total number of steps taken per day?
+
+The total number of steps, taken each day in this study, is calculated and reported in the table **sumstep**.
+
+The below code shows distributio or histogram of the total number of steps taken each day.
+
+The overall mean and median of the total number of steps is calculated into variable **avg_number_of_steps** and
+**median_number_of_steps**
+
+```{r meansteps}
+sumstep <- summarise(group_by(activity1, date), total_steps=sum(steps))
+hist(sumstep$total_steps, breaks=20, xlim = c(0,25000), ylim = c(0,10), xlab="Number of step count", ylab = "Frequency", main="Histogram of steps per day")
+abline(v=c(mean(sumstep$total_steps),median(sumstep$total_steps)), col=c("blue", "red"), lty=c(1,2), lwd=c(3,3), legend(2000,95, c("mean","median")))
+legend(2000,9.5,c("mean","median"), lty=c(1,2), lwd=c(3,3),  col=c("blue", "red"))
+dev.copy(png,'question1.png')
+dev.off()
+avg_number_of_steps <- mean(sumstep$total_steps)
+median_number_of_steps <- median(sumstep$total_steps)
+sumstep
+avg_number_of_steps
+median_number_of_steps
+```
+
+Average number of steps: 10766.19
+Median number of steps: 10765
+
+## What is the average daily activity pattern?
+
+A time series plot of the 5-minute interval and the average number of steps taken, averaged across all days (y-axis) is shown below
+
+
+```{r meanactivitypattern}
+timeseries <- summarise(group_by(activity1, interval), ave_steps=mean(steps))
+plot(x=timeseries$interval, y=timeseries$ave_steps, type="l", col="red", xlab="Time interval of day (5-min in 24hr format)", ylab = "Number of steps", main="Average daily activity pattern")
+dev.copy(png,'question2.png')
+dev.off()
+max <- timeseries[which.max(timeseries$ave_steps),1]
+max_at_timeslot <- timeseries[which.max(timeseries$ave_steps),2]
+```
+
+On average across all the days reported, the maximum number of steps taken in 5min interval is reported as **max_at_timeslot** at timeslot **max**
+
+206 steps at 8:35 in the morning !!!
+
+```{r max}
+max
+max_at_timeslot
+```
+
+
+## Imputing missing values
+
+My strategy for filling in all of the missing values in the dataset is by using the mean for that 5-minute interval calculated in the previous question.
+
+I went back to the original data set **activity** and created **activity2**, a new dataset that is equal to the original dataset but with the missing data filled in.
+
+A histogram of the total number of steps taken each day and
+
+```{r imputing}
+num_of_NA <- sum(is.na(activity$steps))
+activity2 <- merge(timeseries, activity, by = 'interval')
+activity2 <- arrange(activity2, date, interval)
+for(i in 1:nrow(activity2))
+{
+  if(is.na(activity2$steps[i])){
+    activity2$steps[i]=activity2$ave_steps[i]}
+}
+activity2 <- select(activity2,c(steps, date, interval))
+
+sumstep2 <- summarise(group_by(activity2, date), total_steps=sum(steps))
+hist(sumstep2$total_steps, breaks=20, xlim = c(0,25000), ylim = c(0,20), xlab="Number of step count", ylab = "Frequency", main="Histogram of steps per day")
+abline(v=c(mean(sumstep2$total_steps),median(sumstep2$total_steps)), col=c("blue", "red"), lty=c(1,2), lwd=c(3,3), legend(2000,95, c("mean","median")))
+legend(2000,9.5,c("mean","median"), lty=c(1,2), lwd=c(3,3),  col=c("blue", "red"))
+dev.copy(png,'question3.png')
+dev.off()
+```
+
+The new mean and median total number of steps taken per day are caluclated below
+
+```{r averagesteps2}
+avg_number_of_steps2 <- mean(sumstep2$total_steps)
+median_number_of_steps2 <- median(sumstep2$total_steps)
+avg_number_of_steps2
+median_number_of_steps2
+```
+
+These values do not differ much from the estimates from the first part of the assignment.
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+
+A panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis) are shown below.
+
+```{r differences}
+activity1$week <- ifelse(weekdays(activity1$date) %in% c("Saturday", "Sunday"), "weekend", "weekday")
+activity_weekday <- filter(activity1, week=="weekday")
+activity_weekend <- filter(activity1, week=="weekend")
+
+timeseries1 <- summarise(group_by(activity_weekday, interval), ave_steps=mean(steps))
+timeseries2 <- summarise(group_by(activity_weekend, interval), ave_steps=mean(steps))
+
+par(mfrow=c(2,1), mar=c(5.1,4.1,4.1,2.1))
+plot(x=timeseries1$interval, y=timeseries1$ave_steps, type="l", xlim = c(0,2400), ylim = c(0,210), col="red", xlab="Time interval of day (5-min in 24hr format)", ylab = "Number of steps", main="Average weekday activity pattern")
+plot(x=timeseries2$interval, y=timeseries2$ave_steps, type="l", xlim = c(0,2400), ylim = c(0,210), col="blue", xlab="Time interval of day (5-min in 24hr format)", ylab = "Number of steps", main="Average weekend activity pattern")
+dev.copy(png,'question4.png')
+dev.off()
+```
+
+Big difference between the weekday and the weekend activity pattern.
+
+Weekday activity peaks at about 8:35 in the morning then stays relatively low throughout the day with no significant peak. In the afternoon to early evening, activity level is higher than noon (lunch time) activity level. Activity level decreases between 19:00 to 20:00 and starts to flatten out.
+
+Weekend activity is relatively consistent throughout the day with many peaks in the graph. Activity level decreases later, compared to the weekday, and starts to flatten out 21:00.
